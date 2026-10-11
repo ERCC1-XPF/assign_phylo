@@ -70,10 +70,53 @@ def neighbor_joining(distances: np.ndarray, labels: list) -> Node:
         A root node of the neighbor joining tree.
 
     """
-    
-    self.tree = Node()
+    # Create a float copy to keep the original matrix unchanged
+    D = np.array(distances, dtype=float)
+    if D.ndim != 2 or D.shape[0] != D.shape[1] or D.shape[0] != len(labels):
+        raise ValueError("`distances` must be a square matrix matching `labels`")
 
-    raise NotImplementedError()
+    # Every label starts as a leaf node; leaves have no children
+    nodes = [Node(label, None, 0, None, 0) for label in labels]
+    if len(nodes) == 1:
+        return nodes[0]
+
+    n_internal = 0
+    while len(nodes) > 2:
+        n = len(nodes)
+        row_sums = D.sum(axis=1)
+
+        # Calculate Q-values to determine which pair to join
+        Q = (n - 2) * D - row_sums[:, None] - row_sums[None, :]
+
+        #Exclude self-pairs when finding the minimum Q-value
+        np.fill_diagonal(Q, np.inf)  # i != j
+
+        # Find the minimum Q-value, choosing the first pair if tied
+        i, j = np.unravel_index(np.argmin(Q), Q.shape)
+
+        # Branch lengths from i and j to the new node u
+        delta_i = 0.5 * D[i, j] + (row_sums[i] - row_sums[j]) / (2 * (n - 2))
+        delta_j = D[i, j] - delta_i
+
+        new_node = Node(f"internal_{n_internal}", nodes[i], delta_i, nodes[j], delta_j)
+        n_internal += 1
+
+        # Calculate distances from the new node to remaining nodes
+        new_dist = 0.5 * (D[i] + D[j] - D[i, j])
+
+        # Drop rows/cols i and j, then append u at the end of the matrix/list
+        keep = [k for k in range(n) if k != i and k != j]
+        new_dist = new_dist[keep]
+        D = D[np.ix_(keep, keep)]
+        D = np.block([
+            [D, new_dist[:, None]],
+            [new_dist[None, :], np.zeros((1, 1))],
+        ])
+        nodes = [nodes[k] for k in keep] + [new_node]
+
+    # Last two nodes are joined by a root placed halfway between them
+    half = D[0, 1] / 2
+    return Node("ROOT", nodes[0], half, nodes[1], half)
 
 
 def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
