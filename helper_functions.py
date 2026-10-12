@@ -1,6 +1,7 @@
 """Helper functions for HW3"""
 import numpy as np
 from copy import deepcopy
+import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
 
@@ -141,7 +142,111 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
     >>> plot_nj_tree(tree=tree, ax=ax)
     >>> fig.savefig("example.png")
 
+    Optional kwargs
+    ---------------
+    color: default line/label colour (default "k").
+    lw: line width (default 1.5).
+    fontsize: leaf label font size (default 12).
+    leaf_colors: dict {leaf name: colour}. A branch takes the colour of its
+        clade when every leaf below it has the same colour.
+    label_func: callable mapping a leaf name to the text shown (default str).
+    root_stub: length of the short line drawn left of the root
+        (default 2% of the tree depth).
+    show_confidence: annotate internal nodes whose `confidence` is set
+        (default True).
+
     """
+    if ax is None:
+        ax = plt.gca()
+
+    color = kwargs.get("color", "k")
+    lw = kwargs.get("lw", 1.5)
+    fontsize = kwargs.get("fontsize", 12)
+    leaf_colors = kwargs.get("leaf_colors", {})
+    label_func = kwargs.get("label_func", str)
+    show_confidence = kwargs.get("show_confidence", True)
+
+    def children(node):
+        return [
+            (child, dist)
+            for child, dist in [(node.left, node.left_distance), (node.right, node.right_distance)]
+            if child is not None
+        ]
+
+    # 1. Layout: x = cumulative branch length from the root, leaves get
+    #    y = 0, 1, 2, ... in left-to-right order, an internal node sits at the
+    #    mean y of its children
+    coords = {}
+    leaf_counter = [0]
+
+    def layout(node, x):
+        kids = children(node)
+        if not kids:
+            y = leaf_counter[0]
+            leaf_counter[0] += 1
+        else:
+            y = np.mean([layout(child, x + dist) for child, dist in kids])
+        coords[id(node)] = (x, y)
+        return y
+
+    layout(tree, 0.0)
+
+    # 2. Clade colour: shared colour of all leaves below a node, else None
+    clade_color = {}
+
+    def find_clade_color(node):
+        kids = children(node)
+        if not kids:
+            c = leaf_colors.get(node.name)
+        else:
+            kid_colors = {find_clade_color(child) for child, _ in kids}
+            c = kid_colors.pop() if len(kid_colors) == 1 else None
+        clade_color[id(node)] = c
+        return c
+
+    find_clade_color(tree)
+
+    # 3. Draw: a vertical line spanning the children of each internal node
+    #    and a horizontal line (branch length) from each node to every child
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        x, y = coords[id(node)]
+        kids = children(node)
+
+        if not kids:
+            ax.text(
+                x, y, f"  {label_func(node.name)}",
+                color=clade_color[id(node)] or color,
+                fontsize=fontsize,
+                verticalalignment="center",
+            )
+            continue
+
+        child_ys = [coords[id(child)][1] for child, _ in kids]
+        ax.plot([x, x], [min(child_ys), max(child_ys)],
+                color=clade_color[id(node)] or color, lw=lw)
+        for child, _ in kids:
+            cx, cy = coords[id(child)]
+            ax.plot([x, cx], [cy, cy], color=clade_color[id(child)] or color, lw=lw)
+            stack.append(child)
+
+        if show_confidence and node.confidence is not None and node is not tree:
+            ax.text(
+                x, y, f"{node.confidence:.2f} ",
+                fontsize=fontsize * 0.6,
+                horizontalalignment="right",
+                verticalalignment="bottom",
+            )
+
+    # Short stub to the left of the root
+    max_depth = max(x for x, _ in coords.values())
+    root_stub = kwargs.get("root_stub", 0.02 * max_depth if max_depth > 0 else 0.2)
+    root_x, root_y = coords[id(tree)]
+    ax.plot([root_x - root_stub, root_x], [root_y, root_y], color=color, lw=lw)
+
+    for loc in ["top", "right"]:
+        ax.spines[loc].set_visible(False)
 
     return ax
 
