@@ -173,9 +173,8 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
             if child is not None
         ]
 
-    # 1. Layout: x = cumulative branch length from the root, leaves get
-    #    y = 0, 1, 2, ... in left-to-right order, an internal node sits at the
-    #    mean y of its children
+    # 1. Set node positions based on branch lengths and leaf order
+    # Place internal nodes at the mean y-position of their children
     coords = {}
     leaf_counter = [0]
 
@@ -207,7 +206,7 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
     find_clade_color(tree)
 
     # 3. Draw: a vertical line spanning the children of each internal node
-    #    and a horizontal line (branch length) from each node to every child
+    #    and a horizontal line from each node to every child
     stack = [tree]
     while stack:
         node = stack.pop()
@@ -341,7 +340,25 @@ def sort_children_by_leaves(tree: Node) -> None:
         The root node of the tree.
 
     """
-    raise NotImplementedError()
+    def count_and_sort(node):
+        """Sort the subtree below `node` and return its number of leaves."""
+        if node is None:
+            return 0
+        if node.left is None and node.right is None:
+            return 1
+
+        # Sort the children first (bottom-up), counting their leaves on the way
+        n_left = count_and_sort(node.left)
+        n_right = count_and_sort(node.right)
+
+        # The left child should be the one with fewer leaves; swap the
+        # children together with their branch lengths
+        if n_left > n_right:
+            node.left, node.right = node.right, node.left
+            node.left_distance, node.right_distance = node.right_distance, node.left_distance
+        return n_left + n_right
+
+    count_and_sort(tree)
 
 
 def plot_nj_tree_radial(tree: Node, ax: Axes = None, **kwargs) -> None:
