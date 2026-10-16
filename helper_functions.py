@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
 
+# Problems 1-3: tree node used by neighbor joining, plotting and rerooting
 class Node:
     def __init__(
         self,
@@ -49,6 +50,7 @@ class Node:
         self.confidence = confidence
 
 
+# Problem 1
 def neighbor_joining(distances: np.ndarray, labels: list) -> Node:
     """The Neighbor-Joining algorithm.
 
@@ -120,6 +122,7 @@ def neighbor_joining(distances: np.ndarray, labels: list) -> Node:
     return Node("ROOT", nodes[0], half, nodes[1], half)
 
 
+# Problem 2
 def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
     """A function for plotting neighbor joining phylogeny dendrogram.
 
@@ -250,6 +253,9 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
     return ax
 
 
+
+
+# Problem 3b: helper of reroot_tree 
 def _find_a_parent_to_node(tree: Node, node: Node) -> tuple:
     """Utility function for reroot_tree"""
     stack = [tree]
@@ -270,12 +276,14 @@ def _find_a_parent_to_node(tree: Node, node: Node) -> tuple:
 
 
 
+# Problem 3b
 def _remove_child_from_parent(parent_node: Node, child_location: str) -> None:
     """Utility function for reroot_tree"""
     setattr(parent_node, child_location, None)
     setattr(parent_node, f"{child_location}_distance", 0.0)
 
 
+# Problem 3b
 def reroot_tree(original_tree: Node, outgroup_node: Node) -> Node:
     """A function to create a new root and invert a tree accordingly.
 
@@ -329,6 +337,7 @@ def reroot_tree(original_tree: Node, outgroup_node: Node) -> Node:
     return new_root
 
 
+# Problem 3c
 def sort_children_by_leaves(tree: Node) -> None:
     """Sort the children of a tree by their corresponding number of leaves.
 
@@ -361,6 +370,7 @@ def sort_children_by_leaves(tree: Node) -> None:
     count_and_sort(tree)
 
 
+
 def plot_nj_tree_radial(tree: Node, ax: Axes = None, **kwargs) -> None:
     """A function for plotting neighbor joining phylogeny dendrogram
     with a radial layout.
@@ -385,3 +395,94 @@ def plot_nj_tree_radial(tree: Node, ax: Axes = None, **kwargs) -> None:
 
     """
     raise NotImplementedError()
+
+
+# Problem 4: Needleman-Wunsch from the previous assignment
+def global_alignment(seq1, seq2, scoring_function):
+    """Global sequence alignment using the Needleman–Wunsch algorithm.
+
+    Indels should be denoted with the "-" character.
+
+    Parameters
+    ----------
+    seq1: str
+        First sequence to be aligned.
+    seq2: str
+        Second sequence to be aligned.
+    scoring_function: Callable
+
+    Returns
+    -------
+    str
+        First aligned sequence.
+    str
+        Second aligned sequence.
+    float
+        Final score of the alignment.
+
+    Examples
+    --------
+    >>> global_alignment("abracadabra", "dabarakadara", lambda x, y: [-1, 1][x == y])
+    ('-ab-racadabra', 'dabarakada-ra', 5.0)
+
+    Other alignments are not possible.
+
+    """
+    n = len(seq1)
+    m = len(seq2)
+
+    score = [[0] * (m + 1) for _ in range(n + 1)]
+    pointer = [[None] * (m + 1) for _ in range(n + 1)]
+
+    # Initialize the first col. Fill the first col by aligning seq1 prefixes to gaps
+    for i in range(1, n + 1):
+        score[i][0] = score[i - 1][0] + scoring_function(seq1[i - 1], "-")
+        pointer[i][0] = "up"
+
+    # Fill the first row by aligning seq2 prefixes to gaps
+    for j in range(1, m + 1):
+        score[0][j] = score[0][j - 1] + scoring_function("-", seq2[j - 1])
+        pointer[0][j] = "left"
+
+    # Fill the matrix
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            diagonal = score[i - 1][j - 1] + scoring_function(seq1[i - 1], seq2[j - 1])
+            up = score[i - 1][j] + scoring_function(seq1[i - 1], "-")
+            left = score[i][j - 1] + scoring_function("-", seq2[j - 1])
+
+            score[i][j] = max(diagonal, up, left)
+
+            if score[i][j] == diagonal:
+                pointer[i][j] = "diag"
+            elif score[i][j] == up:
+                pointer[i][j] = "up"
+            else:
+                pointer[i][j] = "left"
+
+    # Trace back from the bottom right cell
+    aln1, aln2 = [], []
+    i, j = n, m
+    while i > 0 or j > 0:
+        move = pointer[i][j]
+        if move == "diag":
+            aln1.append(seq1[i - 1])
+            aln2.append(seq2[j - 1])
+            i -= 1
+            j -= 1
+        elif move == "up":
+            aln1.append(seq1[i - 1])
+            aln2.append("-")
+            i -= 1
+        else:
+            aln1.append("-")
+            aln2.append(seq2[j - 1])
+            j -= 1
+
+    return "".join(reversed(aln1)), "".join(reversed(aln2)), float(score[n][m])
+
+
+
+def scoring_function_simple(aa_i,aa_j):
+    score = [-1, 1][aa_i == aa_j]
+    return (score)
