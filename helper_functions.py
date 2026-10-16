@@ -486,3 +486,77 @@ def global_alignment(seq1, seq2, scoring_function):
 def scoring_function_simple(aa_i,aa_j):
     score = [-1, 1][aa_i == aa_j]
     return (score)
+
+
+# Problem 4: numpy version of global_alignment for whole genomes
+def global_alignment_fast(seq1, seq2, match=1, mismatch=-1, gap=-1):
+    """Needleman-Wunsch with match/mismatch/linear-gap scores, vectorised with numpy.
+
+    Gives the same alignment as `global_alignment(seq1, seq2, scoring_function_simple)`
+    (same recurrence and same tie-breaking: diagonal, then up, then left), but fills
+    one whole row of the table at a time, so ~30k x 30k genomes take seconds instead
+    of hours. Only two rows of scores are kept; the traceback pointers are stored as
+    packed bits (2 bits per cell, ~225 MB for two 30 kb genomes).
+
+    Returns
+    -------
+    (str, str, float)
+        First aligned sequence, second aligned sequence, alignment score.
+    """
+    a = np.frombuffer(seq1.encode(), dtype=np.uint8)
+    b = np.frombuffer(seq2.encode(), dtype=np.uint8)
+    n, m = len(a), len(b)
+
+    gap_cost = gap * np.arange(m + 1)        # score of aligning seq2[:j] to gaps
+    previous = gap_cost.astype(np.int64)      # row 0 of the score table
+    n_bytes = (m + 1 + 7) // 8
+    up_bits = np.zeros((n + 1, n_bytes), dtype=np.uint8)
+    left_bits = np.zeros((n + 1, n_bytes), dtype=np.uint8)
+    first_row_left = np.ones(m + 1, dtype=bool)
+    first_row_left[0] = False
+    left_bits[0] = np.packbits(first_row_left)
+
+    best_from_above = np.empty(m + 1, dtype=np.int64)
+    came_from_up = np.empty(m + 1, dtype=bool)
+    for i in range(1, n + 1):
+        substitution = np.where(b == a[i - 1], match, mismatch)
+        diagonal = previous[:-1] + substitution
+        up = previous + gap
+
+        # Choose the higher score from diagonal or up, preferring diagonal in ties
+        # Column 0 can only come from up
+        best_from_above[0] = up[0]
+        came_from_up[0] = True
+        np.maximum(diagonal, up[1:], out=best_from_above[1:])
+        np.greater(up[1:], diagonal, out=came_from_up[1:])
+
+        # Calculate the best scores from left moves using a running maximum
+        current = np.maximum.accumulate(best_from_above - gap_cost) + gap_cost
+        came_from_left = current > best_from_above   # left only if strictly better
+
+        up_bits[i] = np.packbits(came_from_up)
+        left_bits[i] = np.packbits(came_from_left)
+        previous = current
+
+    def bit(bits, i, j):
+        return (bits[i, j >> 3] >> (7 - (j & 7))) & 1
+
+    # Trace back from the bottom right cell
+    aln1, aln2 = [], []
+    i, j = n, m
+    while i > 0 or j > 0:
+        if bit(left_bits, i, j):
+            aln1.append("-")
+            aln2.append(seq2[j - 1])
+            j -= 1
+        elif i > 0 and (j == 0 or bit(up_bits, i, j)):
+            aln1.append(seq1[i - 1])
+            aln2.append("-")
+            i -= 1
+        else:
+            aln1.append(seq1[i - 1])
+            aln2.append(seq2[j - 1])
+            i -= 1
+            j -= 1
+
+    return "".join(reversed(aln1)), "".join(reversed(aln2)), float(previous[m])
