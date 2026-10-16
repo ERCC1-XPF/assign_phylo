@@ -157,6 +157,8 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
         (default 2% of the tree depth).
     show_confidence: annotate internal nodes whose `confidence` is set
         (default True).
+    confidence_fontsize: font size of the confidence values
+        (default 0.6 * fontsize).
 
     """
     if ax is None:
@@ -168,6 +170,7 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
     leaf_colors = kwargs.get("leaf_colors", {})
     label_func = kwargs.get("label_func", str)
     show_confidence = kwargs.get("show_confidence", True)
+    confidence_fontsize = kwargs.get("confidence_fontsize", fontsize * 0.6)
 
     def children(node):
         return [
@@ -236,7 +239,7 @@ def plot_nj_tree(tree: Node, ax: Axes = None, **kwargs) -> None:
         if show_confidence and node.confidence is not None and node is not tree:
             ax.text(
                 x, y, f"{node.confidence:.2f} ",
-                fontsize=fontsize * 0.6,
+                fontsize=confidence_fontsize,
                 horizontalalignment="right",
                 verticalalignment="bottom",
             )
